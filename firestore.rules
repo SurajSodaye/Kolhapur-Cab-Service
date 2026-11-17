@@ -1,0 +1,126 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Single source of truth for admin role: Firestore 'admins/{uid}' document
+    function isAdmin() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+        (
+          get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.active == true ||
+          get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.active == 'true'
+        ) &&
+        (
+          get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'admin' ||
+          get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'superadmin'
+        );
+    }
+
+    // 1. Bookings Collection (Full customer PII)
+    match /bookings/{bookingId} {
+      // Public customers can place bookings with status 'PENDING' only
+      allow create: if request.resource.data.status == 'PENDING'
+                    && (!('driverDetails' in request.resource.data) || request.resource.data.driverDetails == null)
+                    && request.resource.data.customerName is string
+                    && request.resource.data.customerPhone is string;
+
+      // Only administrators can view, update, assign drivers, or delete bookings
+      allow read, update, delete: if isAdmin();
+    }
+
+    // 2. Booking Tracking Collection (Unguessable random token ID)
+    match /bookingTracking/{trackingToken} {
+      // Created alongside booking with initial pending status
+      allow create: if request.resource.data.status == 'PENDING';
+
+      // Public status lookup allowed only via knowledge of unguessable trackingToken
+      allow read: if true;
+
+      // Only administrators can update status, vehicle, and driver tracking info
+      allow update, delete: if isAdmin();
+    }
+
+    // 3. Customer Enquiries
+    match /enquiries/{enquiryId} {
+      allow create: if request.resource.data.customerName is string
+                    && request.resource.data.phone is string;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // 4. Callback Requests
+    match /callbackRequests/{requestId} {
+      allow create: if request.resource.data.customerName is string
+                    && request.resource.data.phone is string;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // 5. Customer Reviews
+    match /reviews/{reviewId} {
+      // Public can only read approved reviews
+      allow read: if resource.data.status == 'approved' 
+                  || resource.data.status == 'published'
+                  || isAdmin();
+
+      // Public can submit reviews, initially in pending state
+      allow create: if request.resource.data.status == 'pending'
+                    || (!('status' in request.resource.data) && request.resource.data.rating is number);
+
+      // Only administrators can moderate, approve, or delete reviews
+      allow update, delete: if isAdmin();
+    }
+
+    // 6. Public Catalogue Collections (Vehicles, Routes, Services, Offers, Settings)
+    match /vehicles/{vehicleId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /routes/{routeId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /services/{serviceId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /offers/{offerId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 7. Internal Driver Roster (Strictly internal, no public access)
+    match /drivers/{driverId} {
+      allow read, write: if isAdmin();
+    }
+
+    // 8. Notifications
+    match /notifications/{notificationId} {
+      allow read, write: if isAdmin();
+    }
+
+    // 9. Admin Authorization Collection (Single Source of Truth)
+    match /admins/{uid} {
+      // Authenticated users can read ONLY their own admin doc for role verification
+      // Already authorized admins can read any admin document
+      allow get: if isAuthenticated() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+
+      // Users CANNOT create, update, or delete their own admin doc.
+      // Only an ALREADY authorized admin can create, update, or delete admin documents.
+      // Public / non-admin users cannot grant themselves admin access.
+      allow create, update, delete: if isAdmin();
+    }
+  }
+}

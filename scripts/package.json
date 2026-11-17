@@ -1,0 +1,13 @@
+{
+  "name": "kolhapur-cab-service-admin-tools",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Administrative tools and Firebase Admin SDK scripts for Kolhapur Cab Service",
+  "scripts": {
+    "set-admin": "node set-admin-claim.mjs"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0"
+  }
+}
