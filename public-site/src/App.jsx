@@ -19,6 +19,7 @@ import Faq from './pages/Faq';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import Terms from './pages/Terms';
 import NotFound from './pages/NotFound';
+import AdminDevBridge from './pages/AdminDevBridge';
 
 // Helper to scroll to top on route change
 function ScrollToTop() {
@@ -58,6 +59,7 @@ export default function App() {
             <Route path="/faq" element={<Faq />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/terms" element={<Terms />} />
+            <Route path="/admin/*" element={<AdminDevBridge />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </div>

@@ -14,8 +14,9 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState('');
 
-  // Destination after login
-  const from = location.state?.from?.pathname || '/dashboard';
+  // Destination after login (guard against redirect loops where from is /login)
+  const rawFrom = location.state?.from?.pathname;
+  const from = (!rawFrom || rawFrom === '/login' || rawFrom === '/admin/login') ? '/dashboard' : rawFrom;
 
   // If already authenticated and authorized, redirect to destination
   if (currentUser && isAdmin) {
@@ -91,7 +92,7 @@ export default function LoginPage() {
             }}
           >
             <img
-              src="/brand-emblem-128.png"
+              src={`${import.meta.env.BASE_URL}brand-emblem-128.png`}
               alt="Kolhapur Cab Service"
               style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             />

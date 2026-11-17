@@ -1,13 +1,19 @@
 import React, { useState } from 'react';
-import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ShieldAlert, LogOut, Loader2, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.jsx';
 
 export default function ProtectedRoute() {
   const { currentUser, isAdmin, loading, logout, refreshAdminStatus, authDiagnostic } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshNotice, setRefreshNotice] = useState(null);
+
+  const handleSignOut = async () => {
+    await logout();
+    navigate('/login', { replace: true });
+  };
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -42,7 +48,7 @@ export default function ProtectedRoute() {
       >
         <div style={{ position: 'relative', width: '56px', height: '56px' }}>
           <img
-            src="/brand-emblem-128.png"
+            src={`${import.meta.env.BASE_URL}brand-emblem-128.png`}
             alt="Kolhapur Cab Service Emblem"
             style={{ width: '100%', height: '100%', objectFit: 'contain' }}
           />
@@ -240,7 +246,7 @@ export default function ProtectedRoute() {
 
             <button
               type="button"
-              onClick={logout}
+              onClick={handleSignOut}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',

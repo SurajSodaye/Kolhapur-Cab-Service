@@ -1,0 +1,19 @@
+{
+  "name": "kolhapur-cab-service-platform",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Kolhapur Cab Service — Combined Public Website and Admin Operations Dashboard",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:public": "npm --prefix public-site run dev",
+    "dev:admin": "npm --prefix admin-dashboard run dev",
+    "install:all": "npm --prefix public-site install && npm --prefix admin-dashboard install",
+    "build:public": "npm --prefix public-site run build",
+    "build:admin": "npm --prefix admin-dashboard run build",
+    "build": "npm run build:public && npm run build:admin && node scripts/combine-builds.mjs",
+    "test:public": "npm --prefix public-site test",
+    "preview": "node scripts/preview-server.mjs",
+    "preview:serve": "npx -y serve -c serve.json dist"
+  }
+}

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Link, NavLink, useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Phone, 
   MapPin, 
@@ -21,6 +21,48 @@ export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const clickCountRef = useRef(0);
+  const timerRef = useRef(null);
+
+  const handleLogoClick = (e) => {
+    // Prevent immediate navigation so clicks 1-4 do not trigger route reloads
+    e.preventDefault();
+    closeMenu();
+
+    clickCountRef.current += 1;
+
+    if (clickCountRef.current === 1) {
+      // Start 2-second detection window
+      timerRef.current = setTimeout(() => {
+        clickCountRef.current = 0;
+        timerRef.current = null;
+        // User clicked fewer than 5 times within 2 seconds: perform normal home navigation
+        if (location.pathname !== '/') {
+          navigate('/');
+        } else {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      }, 2000);
+    } else if (clickCountRef.current >= 5) {
+      // 5 clicks achieved within 2 seconds: cancel normal navigation & open admin login
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      clickCountRef.current = 0;
+      window.location.assign('/admin/login');
+    }
+  };
+
+  // Clean up any pending timer on component unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -88,8 +130,8 @@ export default function Header() {
       <nav className={`glass-nav border-b border-slate-200/80 transition-shadow duration-300 ${scrolled ? 'shadow-card' : 'shadow-subtle'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-20">
-            {/* Logo */}
-            <Link to="/" onClick={closeMenu} className="focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-2xl">
+            {/* Logo with 5-click admin shortcut */}
+            <Link to="/" onClick={handleLogoClick} className="focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-2xl">
               <BrandLogo variant="light" size="md" />
             </Link>
 

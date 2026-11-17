@@ -1,6 +1,6 @@
 import { Bell, Check, ChevronDown, Menu, Search, Settings, UserRound, X, LogOut, ShieldCheck } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNotifications } from '../../context/NotificationsContext.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { profileDefaults } from '../../data/profileDefaults.js'
@@ -28,6 +28,8 @@ export default function AdminNavbar({ onMenuClick, searchValue, onSearch }) {
   const [showSignoutConfirm, setShowSignoutConfirm] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
+  const notificationsRef = useRef(null)
+  const profileRef = useRef(null)
   const { notifications, unreadCount, markRead } = useNotifications()
   const { currentUser, logout } = useAuth()
   const recentNotifications = [...notifications]
@@ -35,6 +37,35 @@ export default function AdminNavbar({ onMenuClick, searchValue, onSearch }) {
     .slice(0, 4)
   const page = pageNames[location.pathname.split('/')[1]] || 'Dashboard'
   const toggleMenu = (name) => setMenu((current) => current === name ? '' : name)
+
+  // Close open dropdown when clicking outside or pressing Escape
+  useEffect(() => {
+    if (!menu) return
+
+    const handlePointerDown = (event) => {
+      if (menu === 'profile' && profileRef.current && !profileRef.current.contains(event.target)) {
+        setMenu('')
+      } else if (menu === 'notifications' && notificationsRef.current && !notificationsRef.current.contains(event.target)) {
+        setMenu('')
+      }
+    }
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setMenu('')
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('touchstart', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('touchstart', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [menu])
 
   const userInitials = (currentUser?.displayName
     ? currentUser.displayName.slice(0, 2)
@@ -45,6 +76,7 @@ export default function AdminNavbar({ onMenuClick, searchValue, onSearch }) {
 
   const handleSignOut = async () => {
     setShowSignoutConfirm(false)
+    setMenu('')
     try {
       await logout()
     } catch (err) {
@@ -96,7 +128,7 @@ export default function AdminNavbar({ onMenuClick, searchValue, onSearch }) {
           </button>
 
           {/* Notifications Dropdown */}
-          <div className="dropdown-anchor">
+          <div className="dropdown-anchor" ref={notificationsRef}>
             <button
               className="icon-button notification-button"
               type="button"
@@ -158,7 +190,7 @@ export default function AdminNavbar({ onMenuClick, searchValue, onSearch }) {
           </div>
 
           {/* Profile Dropdown */}
-          <div className="dropdown-anchor profile-anchor">
+          <div className="dropdown-anchor profile-anchor" ref={profileRef}>
             <button
               className="profile-button"
               type="button"
@@ -175,22 +207,46 @@ export default function AdminNavbar({ onMenuClick, searchValue, onSearch }) {
               <ChevronDown size={15} />
             </button>
             {menu === 'profile' && (
-              <div className="dropdown-panel profile-panel">
-                <button type="button" onClick={() => { navigate('/profile'); setMenu('') }}>
-                  <UserRound size={16} />My Profile
-                </button>
-                <button type="button" onClick={() => { navigate('/settings'); setMenu('') }}>
-                  <Settings size={16} />Settings
+              <div className="dropdown-panel profile-panel" role="menu" aria-label="Administrator Account Menu">
+                <div className="profile-panel-user">
+                  <strong>{userDisplayName}</strong>
+                  <small>{userSubtext}</small>
+                </div>
+                <div className="dropdown-divider" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    navigate('/profile')
+                    setMenu('')
+                  }}
+                >
+                  <UserRound size={16} />
+                  <span>My Profile</span>
                 </button>
                 <button
                   type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    navigate('/settings')
+                    setMenu('')
+                  }}
+                >
+                  <Settings size={16} />
+                  <span>Settings</span>
+                </button>
+                <div className="dropdown-divider" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="profile-signout-btn"
                   onClick={() => {
                     setMenu('')
                     setShowSignoutConfirm(true)
                   }}
-                  style={{ color: '#dc2626' }}
                 >
-                  <LogOut size={16} />Sign Out
+                  <LogOut size={16} />
+                  <span>Sign Out</span>
                 </button>
               </div>
             )}
@@ -217,9 +273,29 @@ export default function AdminNavbar({ onMenuClick, searchValue, onSearch }) {
       {/* Sign Out Modal */}
       {showSignoutConfirm && (
         <div className="modal-backdrop" role="presentation" onClick={() => setShowSignoutConfirm(false)}>
-          <div className="booking-modal" style={{ maxWidth: '400px', padding: '24px' }} onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ margin: '0 0 10px', fontSize: '16px', fontWeight: 700 }}>Sign Out from Admin</h3>
-            <p style={{ margin: '0 0 20px', color: '#64748b', fontSize: '13px', lineHeight: 1.5 }}>
+          <div
+            className="booking-modal"
+            style={{
+              maxWidth: '440px',
+              width: '100%',
+              padding: '24px',
+              background: '#ffffff',
+              borderRadius: '16px',
+              border: '1px solid #e2e8f0',
+              boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
+              <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#fef3c7', color: '#d97706', display: 'grid', placeItems: 'center' }}>
+                <LogOut size={20} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>Confirm Sign Out</h3>
+                <small style={{ color: '#64748b' }}>Operations Administrator Session</small>
+              </div>
+            </div>
+            <p style={{ margin: '0 0 20px', color: '#475569', fontSize: '13px', lineHeight: 1.5 }}>
               Are you sure you want to end your session as <strong>{userDisplayName}</strong>?
             </p>
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>

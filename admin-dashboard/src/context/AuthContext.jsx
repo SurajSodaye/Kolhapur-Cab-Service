@@ -175,14 +175,21 @@ export function AuthProvider({ children }) {
    * Firebase Sign Out
    */
   const logout = async () => {
+    // Clear user and admin authorization immediately to prevent race conditions or redirects bouncing back
+    setCurrentUser(null);
+    setIsAdmin(false);
+    setAdminProfile(null);
+    setAuthError(null);
+    setAuthDiagnostic(null);
+
     try {
       await firebaseSignOut(auth);
+    } catch (err) {
+      console.error('Error signing out of Firebase Auth:', err);
+    } finally {
       setCurrentUser(null);
       setIsAdmin(false);
       setAdminProfile(null);
-      setAuthError(null);
-    } catch (err) {
-      console.error('Error signing out:', err);
     }
   };
 

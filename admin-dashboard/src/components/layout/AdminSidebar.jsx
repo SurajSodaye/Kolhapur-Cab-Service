@@ -61,7 +61,7 @@ export default function AdminSidebar({ collapsed, onToggle, mobileOpen, onClose 
         <div className="brand-row">
           <div className="brand-mark" style={{ background: 'transparent', padding: 0 }}>
             <img
-              src="/brand-emblem-128.png"
+              src={`${import.meta.env.BASE_URL}brand-emblem-128.png`}
               alt="Kolhapur Cab Service Logo"
               style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             />
@@ -112,7 +112,19 @@ export default function AdminSidebar({ collapsed, onToggle, mobileOpen, onClose 
       {/* Logout confirmation dialog */}
       {logoutModalOpen && (
         <div className="modal-backdrop" role="presentation" onClick={() => setLogoutModalOpen(false)}>
-          <div className="booking-modal" style={{ maxWidth: '420px', padding: '24px' }} onClick={(e) => e.stopPropagation()}>
+          <div
+            className="booking-modal"
+            style={{
+              maxWidth: '440px',
+              width: '100%',
+              padding: '24px',
+              background: '#ffffff',
+              borderRadius: '16px',
+              border: '1px solid #e2e8f0',
+              boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
               <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#fef3c7', color: '#d97706', display: 'grid', placeItems: 'center' }}>
                 <LogOut size={20} />

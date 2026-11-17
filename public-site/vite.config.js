@@ -6,7 +6,14 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
-    open: false
+    open: false,
+    proxy: {
+      '/admin': {
+        target: 'http://localhost:5174',
+        changeOrigin: true,
+        ws: true,
+      }
+    }
   }
 });
 
