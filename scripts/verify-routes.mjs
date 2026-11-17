@@ -46,19 +46,23 @@ check('Admin HTML references /admin/favicon.png and emblem', adminHtml.includes(
 const jsMatches = [...publicHtml.matchAll(/src="([^"]+)"/g)].map(m => m[1]);
 const cssMatches = [...publicHtml.matchAll(/href="([^"]+\.css)"/g)].map(m => m[1]);
 
+let samplePublicJs = null;
 for (const assetPath of [...jsMatches, ...cssMatches]) {
   const cleanPath = assetPath.replace(/^\//, '');
   const physicalPath = path.join(DIST_DIR, cleanPath);
   check(`Public asset exists: ${cleanPath}`, fs.existsSync(physicalPath));
+  if (cleanPath.endsWith('.js') && !samplePublicJs) samplePublicJs = assetPath;
 }
 
 const adminJsMatches = [...adminHtml.matchAll(/src="([^"]+)"/g)].map(m => m[1]);
 const adminCssMatches = [...adminHtml.matchAll(/href="([^"]+\.css)"/g)].map(m => m[1]);
 
+let sampleAdminJs = null;
 for (const assetPath of [...adminJsMatches, ...adminCssMatches]) {
   const cleanPath = assetPath.replace(/^\//, '');
   const physicalPath = path.join(DIST_DIR, cleanPath);
   check(`Admin asset exists: ${cleanPath}`, fs.existsSync(physicalPath));
+  if (cleanPath.endsWith('.js') && !sampleAdminJs) sampleAdminJs = assetPath;
 }
 
 // 3. Check shared branding images in dist
@@ -75,16 +79,20 @@ const brandImages = [
 
 for (const img of brandImages) {
   check(`Root branding image exists: dist/${img}`, fs.existsSync(path.join(DIST_DIR, img)));
+  check(`Admin branding image exists: dist/admin/${img}`, fs.existsSync(path.join(DIST_DIR, 'admin', img)));
 }
 
 // 4. Test Vercel Rewrite simulation logic
-console.log('\n--- Testing Vercel Rewrite Rules ---');
+console.log('\n--- Testing Vercel Rewrite Rules & Configuration ---');
 
 const vercelConfig = JSON.parse(fs.readFileSync('vercel.json', 'utf8'));
 const rewrites = vercelConfig.rewrites;
 
+// Verify cleanUrls is NOT true (cleanUrls conflicts with SPA .html rewrite destinations)
+check('vercel.json does not enable conflicting "cleanUrls: true"', vercelConfig.cleanUrls !== true);
+
 function simulateVercelRoute(urlPath) {
-  // Check physical static file first (must be a file, not a directory)
+  // Step 1: In Vercel, physical files on filesystem take precedence over rewrites
   const clean = urlPath.replace(/^\//, '');
   if (clean) {
     const full = path.join(DIST_DIR, clean);
@@ -93,16 +101,25 @@ function simulateVercelRoute(urlPath) {
     }
   }
 
-  // Evaluate rewrites in order
+  // Step 2: Evaluate rewrites in order from top to bottom
   for (const r of rewrites) {
-    if (r.source === '/admin/:path*' && (urlPath.startsWith('/admin/') || urlPath === '/admin/')) {
-      return { type: 'rewrite', target: r.destination };
+    let regex;
+    if (r.source.startsWith('/') && (r.source.includes('(') || r.source.includes(':'))) {
+      const pattern = r.source
+        .replace(/:[a-zA-Z0-9_]+\*/g, '(.*)')
+        .replace(/:[a-zA-Z0-9_]+/g, '([^/]+)');
+      regex = new RegExp(`^${pattern}$`);
+    } else {
+      regex = new RegExp(`^${r.source}$`);
     }
-    if (r.source === '/admin' && urlPath === '/admin') {
-      return { type: 'rewrite', target: r.destination };
-    }
-    if (r.source === '/((?!admin).*)' && !urlPath.startsWith('/admin')) {
-      return { type: 'rewrite', target: r.destination };
+
+    const match = urlPath.match(regex);
+    if (match) {
+      let dest = r.destination;
+      if (dest.includes('$1') && match[1] !== undefined) {
+        dest = dest.replace('$1', match[1]);
+      }
+      return { type: 'rewrite', target: dest };
     }
   }
 
@@ -115,18 +132,19 @@ function simulateVercelRoute(urlPath) {
 }
 
 const testPaths = [
-  { path: '/', expectedTarget: '/index.html', desc: 'Homepage' },
-  { path: '/about', expectedTarget: '/index.html', desc: 'Public /about route' },
-  { path: '/fleet', expectedTarget: '/index.html', desc: 'Public /fleet route' },
-  { path: '/booking', expectedTarget: '/index.html', desc: 'Public /booking route' },
-  { path: '/booking-status', expectedTarget: '/index.html', desc: 'Public /booking-status' },
-  { path: '/admin', expectedTarget: '/admin/index.html', desc: 'Admin root entry' },
-  { path: '/admin/login', expectedTarget: '/admin/index.html', desc: 'Admin login page' },
-  { path: '/admin/dashboard', expectedTarget: '/admin/index.html', desc: 'Admin dashboard page' },
-  { path: '/admin/bookings', expectedTarget: '/admin/index.html', desc: 'Admin bookings page' },
-  { path: '/admin/vehicles', expectedTarget: '/admin/index.html', desc: 'Admin vehicles page' },
-  { path: '/admin/drivers', expectedTarget: '/admin/index.html', desc: 'Admin drivers page' },
-  { path: '/admin/settings', expectedTarget: '/admin/index.html', desc: 'Admin settings page' },
+  { path: '/', expectedType: 'rewrite', expectedTarget: '/index.html', desc: 'Homepage' },
+  { path: '/about', expectedType: 'rewrite', expectedTarget: '/index.html', desc: 'Public /about route' },
+  { path: '/fleet', expectedType: 'rewrite', expectedTarget: '/index.html', desc: 'Public /fleet route' },
+  { path: '/booking', expectedType: 'rewrite', expectedTarget: '/index.html', desc: 'Public /booking route' },
+  { path: '/booking-status', expectedType: 'rewrite', expectedTarget: '/index.html', desc: 'Public /booking-status' },
+  { path: '/admin', expectedType: 'rewrite', expectedTarget: '/admin/index.html', desc: 'Admin root entry' },
+  { path: '/admin/', expectedType: 'rewrite', expectedTarget: '/admin/index.html', desc: 'Admin trailing-slash entry' },
+  { path: '/admin/login', expectedType: 'rewrite', expectedTarget: '/admin/index.html', desc: 'Admin login page' },
+  { path: '/admin/dashboard', expectedType: 'rewrite', expectedTarget: '/admin/index.html', desc: 'Admin dashboard page' },
+  { path: '/admin/bookings', expectedType: 'rewrite', expectedTarget: '/admin/index.html', desc: 'Admin bookings page' },
+  { path: '/admin/vehicles', expectedType: 'rewrite', expectedTarget: '/admin/index.html', desc: 'Admin vehicles page' },
+  { path: '/admin/drivers', expectedType: 'rewrite', expectedTarget: '/admin/index.html', desc: 'Admin drivers page' },
+  { path: '/admin/settings', expectedType: 'rewrite', expectedTarget: '/admin/index.html', desc: 'Admin settings page' },
 ];
 
 for (const tp of testPaths) {
@@ -135,12 +153,30 @@ for (const tp of testPaths) {
   check(`Route '${tp.path}' (${tp.desc}) -> ${result.target || result.type}`, matched);
 }
 
+// 5. Test Static Assets are served directly and NOT rewritten to HTML
+console.log('\n--- Testing Static Asset Serving (Not Rewritten to HTML) ---');
+
+if (sampleAdminJs) {
+  const result = simulateVercelRoute(sampleAdminJs);
+  const isStatic = result.type === 'static_file' && !result.target.endsWith('index.html');
+  check(`Admin bundle '${sampleAdminJs}' served as static file (NOT rewritten to HTML)`, isStatic);
+}
+
+if (samplePublicJs) {
+  const result = simulateVercelRoute(samplePublicJs);
+  const isStatic = result.type === 'static_file' && !result.target.endsWith('index.html');
+  check(`Public bundle '${samplePublicJs}' served as static file (NOT rewritten to HTML)`, isStatic);
+}
+
+const adminLogoResult = simulateVercelRoute('/admin/brand-emblem-128.png');
+check(`Admin logo '/admin/brand-emblem-128.png' served as static file`, adminLogoResult.type === 'static_file');
+
 console.log('\n' + '='.repeat(65));
 if (hasErrors) {
   console.error('❌ Verification completed with errors.');
   process.exit(1);
 } else {
-  console.log('✅ ALL TESTS PASSED! Combined build is 100% verified.');
+  console.log('✅ ALL TESTS PASSED! Combined build and Vercel routing 100% verified.');
   console.log('='.repeat(65) + '\n');
   process.exit(0);
 }
