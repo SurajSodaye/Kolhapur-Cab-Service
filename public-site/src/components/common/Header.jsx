@@ -12,18 +12,44 @@ import {
   ShieldCheck, 
   MessageCircle,
   ChevronRight,
-  ArrowRight
+  User,
+  LogOut,
+  ChevronDown,
+  UserPlus,
+  LogIn
 } from 'lucide-react';
 import BrandLogo from './BrandLogo';
 import { mockSettings } from '../../data/mockContent';
+import { useCustomerAuth } from '../../context/CustomerAuthContext';
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const clickCountRef = useRef(0);
   const timerRef = useRef(null);
+  const userDropdownRef = useRef(null);
+
+  const { currentCustomer, customerProfile, logout } = useCustomerAuth();
+
+  // Close customer dropdown on outside click
+  useEffect(() => {
+    const handleOutsideClick = (event) => {
+      if (userDropdownRef.current && !userDropdownRef.current.contains(event.target)) {
+        setUserDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  // Close menus on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+    setUserDropdownOpen(false);
+  }, [location.pathname]);
 
   const handleLogoClick = (e) => {
     // Prevent immediate navigation so clicks 1-4 do not trigger route reloads
@@ -84,6 +110,16 @@ export default function Header() {
 
   const closeMenu = () => setMobileMenuOpen(false);
 
+  const handleLogout = async () => {
+    setUserDropdownOpen(false);
+    closeMenu();
+    await logout();
+    navigate('/');
+  };
+
+  const displayName = customerProfile?.name || currentCustomer?.displayName || currentCustomer?.email?.split('@')[0] || 'Customer';
+  const displayInitials = displayName ? displayName.slice(0, 2).toUpperCase() : 'CU';
+
   return (
     <header className="sticky top-0 z-50 w-full transition-all duration-300">
       {/* Top Announcement & Quick Contact Bar */}
@@ -122,6 +158,19 @@ export default function Header() {
               <Search className="w-3.5 h-3.5 text-amber-400" />
               <span>Track Booking</span>
             </Link>
+
+            {currentCustomer && (
+              <>
+                <span className="text-slate-700 hidden sm:inline">|</span>
+                <Link
+                  to="/my-bookings"
+                  className="flex items-center gap-1 text-amber-300 hover:text-amber-200 font-semibold transition-colors"
+                >
+                  <Car className="w-3.5 h-3.5 text-amber-400" />
+                  <span>My Bookings</span>
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -142,7 +191,7 @@ export default function Header() {
                   key={link.path}
                   to={link.path}
                   className={({ isActive }) =>
-                    `px-3.5 py-2 rounded-xl text-sm font-semibold transition-all duration-150 ${
+                    `px-3 py-2 rounded-xl text-sm font-semibold transition-all duration-150 ${
                       isActive
                         ? 'text-amber-800 bg-amber-50 font-bold shadow-subtle'
                         : 'text-slate-700 hover:text-amber-700 hover:bg-slate-100/80'
@@ -154,15 +203,92 @@ export default function Header() {
               ))}
             </div>
 
-            {/* Right Action CTAs */}
-            <div className="hidden md:flex items-center gap-3">
-              <Link
-                to="/booking-status"
-                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200/80 rounded-xl transition-colors border border-slate-200/80"
-              >
-                <Search className="w-3.5 h-3.5 text-amber-600" />
-                <span>Track Status</span>
-              </Link>
+            {/* Right Action CTAs & Customer Authentication Controls */}
+            <div className="hidden md:flex items-center gap-2.5">
+              {/* Customer Logged In Dropdown */}
+              {currentCustomer ? (
+                <div className="relative" ref={userDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200/80 border border-slate-200/90 transition shadow-2xs"
+                    aria-expanded={userDropdownOpen}
+                  >
+                    <div className="w-6 h-6 rounded-lg bg-amber-400 text-slate-950 font-black text-[11px] flex items-center justify-center">
+                      {displayInitials}
+                    </div>
+                    <span className="max-w-[110px] truncate">{displayName}</span>
+                    <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform ${userDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {userDropdownOpen && (
+                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl border border-slate-200 shadow-xl py-2 z-50 animate-in fade-in duration-150">
+                      <div className="px-4 py-2.5 border-b border-slate-100">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                          Customer Account
+                        </span>
+                        <span className="text-xs font-bold text-slate-900 block truncate">
+                          {displayName}
+                        </span>
+                        <span className="text-[11px] text-slate-500 block truncate">
+                          {currentCustomer.email}
+                        </span>
+                      </div>
+
+                      <div className="py-1">
+                        <Link
+                          to="/my-bookings"
+                          onClick={() => setUserDropdownOpen(false)}
+                          className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-slate-700 hover:text-amber-800 hover:bg-amber-50/70 transition"
+                        >
+                          <Car className="w-4 h-4 text-amber-600" />
+                          <span>My Bookings</span>
+                        </Link>
+                        <Link
+                          to="/profile"
+                          onClick={() => setUserDropdownOpen(false)}
+                          className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-slate-700 hover:text-amber-800 hover:bg-amber-50/70 transition"
+                        >
+                          <User className="w-4 h-4 text-slate-500" />
+                          <span>My Profile</span>
+                        </Link>
+                      </div>
+
+                      <div className="pt-1 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={handleLogout}
+                          className="flex items-center gap-2.5 w-full text-left px-4 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition"
+                        >
+                          <LogOut className="w-4 h-4" />
+                          <span>Sign Out</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Customer Logged Out Controls */
+                <div className="flex items-center gap-1.5">
+                  <Link
+                    to="/login"
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition"
+                  >
+                    <LogIn className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Sign In</span>
+                  </Link>
+
+                  <Link
+                    to="/register"
+                    className="inline-flex items-center gap-1 px-3 py-2 text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200/80 rounded-xl transition border border-slate-200"
+                  >
+                    <UserPlus className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Register</span>
+                  </Link>
+                </div>
+              )}
+
+              {/* Book Cab Primary CTA */}
               <Link
                 to="/booking"
                 className="btn-primary"
@@ -196,13 +322,82 @@ export default function Header() {
         {/* Mobile Slide-down Drawer */}
         {mobileMenuOpen && (
           <div className="lg:hidden border-t border-slate-200 bg-white/98 backdrop-blur-md px-4 pt-3 pb-6 space-y-3 shadow-xl animate-in slide-in-from-top-2">
+            {/* Customer Authentication Bar in Mobile Drawer */}
+            {currentCustomer ? (
+              <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200/80 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center shrink-0">
+                    {displayInitials}
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-xs font-bold text-slate-900 block truncate">
+                      {displayName}
+                    </span>
+                    <span className="text-[11px] text-slate-500 block truncate">
+                      {currentCustomer.email}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="p-2 text-rose-600 hover:bg-rose-100/70 rounded-xl transition shrink-0"
+                  title="Sign Out"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2 pb-2 border-b border-slate-100">
+                <Link
+                  to="/login"
+                  onClick={closeMenu}
+                  className="flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold text-slate-800 bg-slate-100 rounded-xl border border-slate-200"
+                >
+                  <LogIn className="w-3.5 h-3.5 text-slate-600" />
+                  <span>Sign In</span>
+                </Link>
+                <Link
+                  to="/register"
+                  onClick={closeMenu}
+                  className="flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold text-slate-950 bg-amber-400 rounded-xl shadow-xs"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>Register</span>
+                </Link>
+              </div>
+            )}
+
+            {/* Customer links if authenticated */}
+            {currentCustomer && (
+              <div className="grid grid-cols-2 gap-2 pb-2 border-b border-slate-100 text-xs">
+                <Link
+                  to="/my-bookings"
+                  onClick={closeMenu}
+                  className="flex items-center justify-center gap-1.5 py-2 rounded-xl font-bold text-amber-900 bg-amber-100/80 border border-amber-200"
+                >
+                  <Car className="w-3.5 h-3.5 text-amber-700" />
+                  <span>My Bookings</span>
+                </Link>
+                <Link
+                  to="/profile"
+                  onClick={closeMenu}
+                  className="flex items-center justify-center gap-1.5 py-2 rounded-xl font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200"
+                >
+                  <User className="w-3.5 h-3.5 text-slate-600" />
+                  <span>My Profile</span>
+                </Link>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 gap-1">
               {navLinks.map((link) => (
                 <Link
                   key={link.path}
                   to={link.path}
                   onClick={closeMenu}
-                  className={`flex items-center justify-between px-3.5 py-3 rounded-xl text-sm font-semibold transition-colors ${
+                  className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
                     location.pathname === link.path
                       ? 'bg-amber-50 text-amber-800 font-bold border-l-4 border-amber-500'
                       : 'text-slate-700 hover:bg-slate-50'
@@ -214,11 +409,11 @@ export default function Header() {
               ))}
             </div>
 
-            <div className="pt-3 border-t border-slate-200 space-y-2.5">
+            <div className="pt-2 border-t border-slate-200 space-y-2.5">
               <Link
                 to="/booking-status"
                 onClick={closeMenu}
-                className="flex items-center justify-center gap-2 w-full py-3 text-sm font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl border border-slate-200"
+                className="flex items-center justify-center gap-2 w-full py-2.5 text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl border border-slate-200"
               >
                 <Search className="w-4 h-4 text-amber-600" />
                 <span>Track Booking Reference</span>
@@ -227,7 +422,7 @@ export default function Header() {
               <Link
                 to="/booking"
                 onClick={closeMenu}
-                className="flex items-center justify-center gap-2 w-full py-3.5 text-sm font-bold text-slate-950 bg-gradient-to-r from-amber-400 to-amber-500 rounded-xl shadow-md shadow-amber-500/20"
+                className="flex items-center justify-center gap-2 w-full py-3 text-sm font-bold text-slate-950 bg-gradient-to-r from-amber-400 to-amber-500 rounded-xl shadow-md shadow-amber-500/20"
               >
                 <Calendar className="w-4 h-4" />
                 <span>Book Instant Cab</span>
@@ -236,16 +431,16 @@ export default function Header() {
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <a
                   href={`tel:${mockSettings.contact.primaryPhone.replace(/\s+/g, '')}`}
-                  className="flex items-center justify-center gap-1.5 py-3 text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl border border-slate-200"
+                  className="flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl border border-slate-200"
                 >
                   <Phone className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Call {mockSettings.contact.primaryPhone}</span>
+                  <span>Call Dispatch</span>
                 </a>
                 <a
                   href={`https://wa.me/${mockSettings.contact.whatsappNumber}?text=Hello%20Kolhapur%20Cab%20Service%2C%20I%20need%20a%20taxi`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-1.5 py-3 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm"
+                  className="flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm"
                 >
                   <MessageCircle className="w-3.5 h-3.5" />
                   <span>WhatsApp</span>

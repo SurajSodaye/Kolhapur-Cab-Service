@@ -21,22 +21,62 @@ service cloud.firestore {
         );
     }
 
-    // 1. Bookings Collection (Full customer PII)
+    // 1. Customer Profiles Collection
+    match /customers/{uid} {
+      // Customer can read their own profile; Admin can read any customer profile
+      allow get: if isAuthenticated() && (request.auth.uid == uid || isAdmin());
+
+      // Only administrators can list all customer accounts
+      allow list: if isAdmin();
+
+      // Authenticated customer can create their own profile document
+      allow create: if isAuthenticated()
+                    && request.auth.uid == uid
+                    && request.resource.data.uid == uid
+                    && request.resource.data.name is string;
+
+      // Customer can update only their own contact info (name, phone, updatedAt)
+      // Cannot alter uid or email
+      allow update: if isAuthenticated()
+                    && request.auth.uid == uid
+                    && request.resource.data.uid == uid
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'phone', 'updatedAt']);
+
+      // Customers cannot delete their profiles via unrestricted client writes
+      allow delete: if isAdmin();
+    }
+
+    // 2. Bookings Collection (Full customer PII & operational dispatch data)
     match /bookings/{bookingId} {
-      // Public customers can place bookings with status 'PENDING' only
-      allow create: if request.resource.data.status == 'PENDING'
+      // Creation rule:
+      // - Customer login is strictly COMPULSORY (no unauthenticated / guest bookings)
+      // - Must be authenticated (request.auth != null)
+      // - customerUid MUST match request.auth.uid (cannot spoof other customer UIDs)
+      // - Status must be 'PENDING'
+      // - Cannot inject driverDetails
+      // - Customer name and phone required
+      allow create: if isAuthenticated()
+                    && request.resource.data.customerUid == request.auth.uid
+                    && request.resource.data.status == 'PENDING'
                     && (!('driverDetails' in request.resource.data) || request.resource.data.driverDetails == null)
                     && request.resource.data.customerName is string
                     && request.resource.data.customerPhone is string;
 
-      // Only administrators can view, update, assign drivers, or delete bookings
-      allow read, update, delete: if isAdmin();
+      // Read rules:
+      // - Administrators can view and list all bookings
+      // - Authenticated customers can read and list ONLY their own bookings
+      allow get: if isAdmin() || (isAuthenticated() && resource.data.customerUid == request.auth.uid);
+      allow list: if isAdmin() || (isAuthenticated() && resource.data.customerUid == request.auth.uid);
+
+      // Updates and deletions:
+      // - Strictly restricted to administrators (fares, driver assignments, statuses are admin-controlled)
+      allow update, delete: if isAdmin();
     }
 
-    // 2. Booking Tracking Collection (Unguessable random token ID)
+    // 3. Booking Tracking Collection (Unguessable random token ID)
     match /bookingTracking/{trackingToken} {
-      // Created alongside booking with initial pending status
-      allow create: if request.resource.data.status == 'PENDING';
+      // Created alongside booking with initial pending status by an authenticated customer
+      allow create: if isAuthenticated() && request.resource.data.status == 'PENDING';
 
       // Public status lookup allowed only via knowledge of unguessable trackingToken
       allow read: if true;
@@ -45,21 +85,21 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    // 3. Customer Enquiries
+    // 4. Customer Enquiries
     match /enquiries/{enquiryId} {
       allow create: if request.resource.data.customerName is string
                     && request.resource.data.phone is string;
       allow read, update, delete: if isAdmin();
     }
 
-    // 4. Callback Requests
+    // 5. Callback Requests
     match /callbackRequests/{requestId} {
       allow create: if request.resource.data.customerName is string
                     && request.resource.data.phone is string;
       allow read, update, delete: if isAdmin();
     }
 
-    // 5. Customer Reviews
+    // 6. Customer Reviews
     match /reviews/{reviewId} {
       // Public can only read approved reviews
       allow read: if resource.data.status == 'approved' 
@@ -74,7 +114,7 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    // 6. Public Catalogue Collections (Vehicles, Routes, Services, Offers, Settings)
+    // 7. Public Catalogue Collections (Vehicles, Routes, Services, Offers, Settings)
     match /vehicles/{vehicleId} {
       allow read: if true;
       allow write: if isAdmin();
@@ -100,17 +140,17 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // 7. Internal Driver Roster (Strictly internal, no public access)
+    // 8. Internal Driver Roster (Strictly internal, no public access)
     match /drivers/{driverId} {
       allow read, write: if isAdmin();
     }
 
-    // 8. Notifications
+    // 9. Notifications
     match /notifications/{notificationId} {
       allow read, write: if isAdmin();
     }
 
-    // 9. Admin Authorization Collection (Single Source of Truth)
+    // 10. Admin Authorization Collection (Single Source of Truth)
     match /admins/{uid} {
       // Authenticated users can read ONLY their own admin doc for role verification
       // Already authorized admins can read any admin document

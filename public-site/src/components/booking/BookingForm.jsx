@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Car, 
@@ -21,16 +21,19 @@ import {
   Check, 
   Printer, 
   Search,
-  Sparkles
+  Sparkles,
+  LogIn
 } from 'lucide-react';
 import { mockVehicles } from '../../data/mockVehicles';
 import { mockSettings } from '../../data/mockContent';
 import { createBooking } from '../../services/bookingService';
+import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import Badge from '../common/Badge';
 import StatusTimeline from '../common/StatusTimeline';
 
 export default function BookingForm({ initialState = {} }) {
   const navigate = useNavigate();
+  const { currentCustomer, customerProfile } = useCustomerAuth();
 
   // Date helpers
   const today = new Date().toISOString().split('T')[0];
@@ -48,10 +51,42 @@ export default function BookingForm({ initialState = {} }) {
   const [vehicleId, setVehicleId] = useState(initialState.vehicleId || 'veh-sedan-dzire');
   
   // Customer details
-  const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [customerEmail, setCustomerEmail] = useState('');
-  const [additionalNotes, setAdditionalNotes] = useState('');
+  const [customerName, setCustomerName] = useState(initialState.customerName || '');
+  const [customerPhone, setCustomerPhone] = useState(initialState.customerPhone || '');
+  const [customerEmail, setCustomerEmail] = useState(initialState.customerEmail || '');
+  const [additionalNotes, setAdditionalNotes] = useState(initialState.additionalNotes || '');
+
+  // Synchronize state if initialState changes (e.g. returned with draft after login)
+  useEffect(() => {
+    if (initialState.tripType) setTripType(initialState.tripType);
+    if (initialState.pickupLocation) setPickupLocation(initialState.pickupLocation);
+    if (initialState.dropLocation) setDropLocation(initialState.dropLocation);
+    if (initialState.pickupDate) setPickupDate(initialState.pickupDate);
+    if (initialState.pickupTime) setPickupTime(initialState.pickupTime);
+    if (initialState.returnDate) setReturnDate(initialState.returnDate);
+    if (initialState.passengers) setPassengers(initialState.passengers);
+    if (initialState.luggage) setLuggage(initialState.luggage);
+    if (initialState.vehicleId) setVehicleId(initialState.vehicleId);
+    if (initialState.customerName) setCustomerName(initialState.customerName);
+    if (initialState.customerPhone) setCustomerPhone(initialState.customerPhone);
+    if (initialState.customerEmail) setCustomerEmail(initialState.customerEmail);
+    if (initialState.additionalNotes) setAdditionalNotes(initialState.additionalNotes);
+  }, [initialState]);
+
+  // Auto-prefill customer details if logged in
+  useEffect(() => {
+    if (customerProfile) {
+      if (!customerName && customerProfile.name) setCustomerName(customerProfile.name);
+      if (!customerPhone && customerProfile.phone) setCustomerPhone(customerProfile.phone);
+      if (!customerEmail && (customerProfile.email || currentCustomer?.email)) {
+        setCustomerEmail(customerProfile.email || currentCustomer?.email || '');
+      }
+    } else if (currentCustomer) {
+      if (!customerName && currentCustomer.displayName) setCustomerName(currentCustomer.displayName);
+      if (!customerEmail && currentCustomer.email) setCustomerEmail(currentCustomer.email);
+      if (!customerPhone && currentCustomer.phoneNumber) setCustomerPhone(currentCustomer.phoneNumber);
+    }
+  }, [customerProfile, currentCustomer]);
 
   // UI States
   const [errors, setErrors] = useState({});
@@ -155,6 +190,36 @@ export default function BookingForm({ initialState = {} }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // MANDATORY CUSTOMER AUTHENTICATION CHECK
+    if (!currentCustomer) {
+      // Capture all filled details into a draft object
+      const draft = {
+        tripType,
+        pickupLocation,
+        dropLocation,
+        pickupDate,
+        pickupTime,
+        returnDate: tripType === 'round-trip' ? returnDate : null,
+        passengers: Number(passengers),
+        luggage: Number(luggage),
+        vehicleId: selectedVehicle.id,
+        customerName,
+        customerPhone,
+        customerEmail,
+        additionalNotes,
+      };
+
+      navigate('/login', {
+        state: {
+          from: '/booking',
+          bookingDraft: draft,
+          notice: 'Please sign in or create an account to book your cab. Your entered travel details have been saved.',
+        },
+      });
+      return;
+    }
+
     if (!validateForm()) {
       window.scrollTo({ top: 200, behavior: 'smooth' });
       return;
@@ -189,7 +254,7 @@ export default function BookingForm({ initialState = {} }) {
       }
     } catch (err) {
       console.error('Booking submission error', err);
-      setErrors({ form: 'An unexpected error occurred while placing your request. Please call our 24x7 desk.' });
+      setErrors({ form: err.message || 'An unexpected error occurred while placing your request. Please call our 24x7 desk.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -383,7 +448,7 @@ export default function BookingForm({ initialState = {} }) {
   return (
     <div className="bg-white rounded-3xl border border-slate-200/90 shadow-card p-6 sm:p-10">
       {/* Form Title & Subtitle */}
-      <div className="border-b border-slate-200/90 pb-6 mb-8">
+      <div className="border-b border-slate-200/90 pb-6 mb-6">
         <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 font-heading">
           Kolhapur Cab Booking Request
         </h2>
@@ -391,6 +456,37 @@ export default function BookingForm({ initialState = {} }) {
           Complete the steps below. We will review vehicle availability and contact you within 15–30 minutes to confirm your ride.
         </p>
       </div>
+
+      {/* Restored State Notice Banner */}
+      {initialState.notice && (
+        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-900 text-xs sm:text-sm font-medium flex items-center gap-2.5">
+          <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+          <span>{initialState.notice}</span>
+        </div>
+      )}
+
+      {/* Customer Authentication Status Banner */}
+      {currentCustomer ? (
+        <div className="mb-6 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs text-slate-700">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            <span>Booking as <strong>{customerProfile?.name || currentCustomer.displayName || currentCustomer.email}</strong></span>
+          </div>
+          <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100/80 px-2.5 py-0.5 rounded-lg">Verified Customer</span>
+        </div>
+      ) : (
+        <div className="mb-6 p-4 bg-amber-50/90 border border-amber-200/90 rounded-2xl flex items-start gap-3">
+          <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-700 border border-amber-500/20 flex items-center justify-center shrink-0 mt-0.5">
+            <LogIn className="w-4 h-4" />
+          </div>
+          <div className="flex-1 text-xs">
+            <div className="font-bold text-amber-900 mb-0.5">Customer Account Required for Booking</div>
+            <p className="text-amber-800 leading-relaxed">
+              Customer login is required to book a cab. You can fill out your trip itinerary below first — your details will be saved when you sign in or register.
+            </p>
+          </div>
+        </div>
+      )}
 
       {errors.form && (
         <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700 text-sm font-semibold flex items-center gap-2.5">
@@ -759,6 +855,15 @@ export default function BookingForm({ initialState = {} }) {
 
         {/* Submit & Dispatch Reassurance */}
         <div className="pt-6 border-t border-slate-200 space-y-4">
+          {!currentCustomer && (
+            <div className="p-4 bg-amber-50 border border-amber-200/90 rounded-2xl flex items-start gap-3">
+              <LogIn className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="text-xs text-amber-900 leading-relaxed">
+                <strong>Sign in required:</strong> Clicking below will securely save your trip itinerary and take you to sign in or create an account to confirm this cab booking.
+              </div>
+            </div>
+          )}
+
           <div className="p-4.5 bg-slate-100/80 rounded-2xl flex items-start gap-3 border border-slate-200/80">
             <ShieldAlert className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
             <p className="text-xs text-slate-600 leading-relaxed">
@@ -772,11 +877,16 @@ export default function BookingForm({ initialState = {} }) {
             className="w-full py-4 px-8 rounded-2xl text-base font-extrabold text-slate-950 bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 hover:from-amber-500 hover:to-amber-500 shadow-md shadow-amber-500/25 hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-2 group disabled:opacity-50"
           >
             {isSubmitting ? (
-              <span>Submitting Booking Request...</span>
-            ) : (
+              <span>Processing Request...</span>
+            ) : currentCustomer ? (
               <>
                 <span>Submit Booking Request</span>
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </>
+            ) : (
+              <>
+                <LogIn className="w-5 h-5" />
+                <span>Sign In to Confirm Cab Booking</span>
               </>
             )}
           </button>

@@ -1,8 +1,8 @@
 // Booking Service - Kolhapur Cab Service
-// Cloud Firestore Collections: 'bookings' (Private Admin) & 'bookingTracking' (Unguessable Public Tracking)
+// Cloud Firestore Collections: 'bookings' (Private Admin & Customer) & 'bookingTracking' (Unguessable Public Tracking)
 
 import { doc, setDoc, getDoc, getDocs, collection, query, where, limit } from 'firebase/firestore';
-import { db } from '../firebase/firebase.js';
+import { db, auth } from '../firebase/firebase.js';
 import { mockBookings } from '../data/mockBookings.js';
 
 const BOOKINGS_STORAGE_KEY = 'kcs_bookings_data';
@@ -44,14 +44,23 @@ function getLocalFallbackBookings() {
 
 /**
  * Create a new customer cab booking request in Cloud Firestore
- * Saves to both:
- * 1. 'bookings' (Private admin collection with customer PII)
- * 2. 'bookingTracking' (Keyed by unguessable tracking token for secure public lookup)
+ *
+ * Security Requirement:
+ * CUSTOMER LOGIN IS STRICTLY COMPULSORY.
+ * Guest booking is blocked. If no authenticated Firebase user exists, reject the request.
+ * customerUid is ALWAYS derived from auth.currentUser.uid (never from an untrusted form field).
  *
  * @param {Object} rawData
  * @returns {Promise<{success: boolean, booking: Object, trackingToken: string, message: string}>}
  */
 export async function createBooking(rawData) {
+  // 1. Mandatory customer authentication check
+  const currentUser = auth.currentUser;
+  if (!currentUser || !currentUser.uid) {
+    throw new Error('Please log in to book a cab.');
+  }
+
+  const currentUid = currentUser.uid;
   const referenceId = generateBookingReference();
   const trackingToken = generateTrackingToken();
   const now = new Date().toISOString();
@@ -60,6 +69,7 @@ export async function createBooking(rawData) {
   const newBooking = {
     id: referenceId,
     trackingToken,
+    customerUid: currentUid,
     tripType: rawData.tripType || 'one-way',
     pickupLocation: String(rawData.pickupLocation || '').trim(),
     dropLocation: String(rawData.dropLocation || '').trim(),
@@ -138,6 +148,36 @@ export async function createBooking(rawData) {
     trackingToken,
     message: 'Booking request placed successfully with status PENDING. Awaiting Kolhapur dispatch desk confirmation.',
   };
+}
+
+/**
+ * Fetch all bookings belonging strictly to an authenticated customer
+ * Enforces ownership constraint: where('customerUid', '==', customerUid)
+ *
+ * @param {string} customerUid
+ * @returns {Promise<Array>}
+ */
+export async function getCustomerBookings(customerUid) {
+  if (!customerUid) return [];
+
+  try {
+    const q = query(
+      collection(db, 'bookings'),
+      where('customerUid', '==', customerUid)
+    );
+    const snap = await getDocs(q);
+    const items = snap.docs.map((docSnap) => ({
+      id: docSnap.id,
+      ...docSnap.data(),
+    }));
+
+    // In-memory sort by createdAt descending (ensures resilience without requiring pre-warmed composite indexes)
+    items.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+    return items;
+  } catch (err) {
+    console.error('Error fetching customer bookings from Firestore:', err);
+    throw err;
+  }
 }
 
 /**
@@ -226,6 +266,7 @@ export async function updateMockBookingStatus(bookingId, newStatus, notes = '') 
 
 export default {
   createBooking,
+  getCustomerBookings,
   getBookingStatus,
   getAllMockBookings,
   updateMockBookingStatus,
